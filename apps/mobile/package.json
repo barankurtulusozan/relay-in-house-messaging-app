@@ -1,0 +1,24 @@
+{
+  "name": "@company-chat/mobile",
+  "version": "1.0.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios"
+  },
+  "dependencies": {
+    "@company-chat/shared": "workspace:*",
+    "expo": "~51.0.0",
+    "react": "18.2.0",
+    "react-native": "0.74.1",
+    "expo-sharing": "~12.0.1",
+    "expo-file-system": "~17.0.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0",
+    "@types/react": "~18.2.45",
+    "typescript": "^5.4.5"
+  }
+}
