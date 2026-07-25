@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  caddy:
+    restart: always
+
+  server:
+    restart: always
+
+  postgres:
+    restart: always
+
+  redis:
+    restart: always
+
+  minio:
+    restart: always
+
+  clamav:
+    restart: always

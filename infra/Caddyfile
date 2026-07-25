@@ -1,0 +1,9 @@
+{$DOMAIN:chat.yourcompany.com} {
+    reverse_proxy /api/* server:8080
+    reverse_proxy /ws server:8080
+    reverse_proxy /* web:3000
+}
+
+{$MINIO_DOMAIN:minio.yourcompany.com} {
+    reverse_proxy minio:9000
+}

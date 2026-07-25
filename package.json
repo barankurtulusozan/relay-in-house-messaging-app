@@ -1,0 +1,15 @@
+{
+  "name": "company-chat-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm --filter shared build && pnpm --filter web build",
+    "test": "pnpm --filter shared test",
+    "dev:web": "pnpm --filter web dev",
+    "dev:mobile": "pnpm --filter mobile start"
+  }
+}
