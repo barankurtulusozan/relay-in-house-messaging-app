@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Company Chat",
+    "slug": "company-chat-mobile",
+    "version": "1.0.0",
+    "sdkVersion": "51.0.0",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.company.chat.mobile"
+    },
+    "android": {
+      "package": "com.company.chat.mobile"
+    }
+  }
+}
