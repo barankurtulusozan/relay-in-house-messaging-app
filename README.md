@@ -44,3 +44,25 @@ company-chat/
 
 ## Provisioning Note (LUKS Volume Encryption)
 For production deployments on host VPS instances, ensure Docker volumes (`pg_data`, `minio_data`, `redis_data`) are mounted on host directories backed by LUKS-encrypted partitions for at-rest data compliance.
+
+## Infrastructure & Service Configuration
+
+| Container Name | Service | Status | Port Mapping |
+| :--- | :--- | :--- | :--- |
+| `infra-server-1` | Go Backend Server | Up (healthy) | `8080:8080` |
+| `infra-postgres-1` | PostgreSQL 16 | Up | `5432:5432` |
+| `infra-redis-1` | Redis 7 | Up | `6379:6379` |
+| `infra-minio-1` | MinIO S3 Storage | Up | `9000:9000, 9001:9001` |
+| `infra-clamav-1` | ClamAV File Scanner | Up | internal |
+| `infra-caddy-1` | Caddy Reverse Proxy | Up | `80:80, 443:443` |
+
+## Command Cheat Sheet
+
+- **Run Go Backend (Docker)**: `cd infra && docker compose up -d --build server`
+- **Run Go Backend (Local Go)**: `export $(cat .env | xargs) && cd apps/server && go run ./cmd/server`
+- **Run Mobile App**: `pnpm dev:mobile`
+- **Run Web App**: `pnpm dev:web`
+- **View Backend Logs**: `cd infra && docker compose logs -f server`
+- **Stop Infrastructure**: `cd infra && docker compose down`
+
+
