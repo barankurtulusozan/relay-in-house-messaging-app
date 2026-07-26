@@ -33,13 +33,13 @@ type PushNotification struct {
 // Repositories (Secondary Ports)
 type UserRepository interface {
 	UpsertOIDCUser(ctx context.Context, oidcSub, email, name string, avatarURL *string) (*User, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (*User, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status UserStatus) error
 }
 
 type ConversationRepository interface {
-	Create(ctx context.Context, conv *Conversation, memberIDs []uuid.UUID) (*Conversation, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*Conversation, error)
+	CreateConversation(ctx context.Context, conv *Conversation, memberIDs []uuid.UUID) (*Conversation, error)
+	GetConversationByID(ctx context.Context, id uuid.UUID) (*Conversation, error)
 	GetUserConversations(ctx context.Context, userID uuid.UUID) ([]*Conversation, error)
 	IsMember(ctx context.Context, conversationID, userID uuid.UUID) (bool, error)
 	GetMembers(ctx context.Context, conversationID uuid.UUID) ([]*ConversationMember, error)
@@ -49,15 +49,15 @@ type ConversationRepository interface {
 
 type MessageRepository interface {
 	InsertMessage(ctx context.Context, msg *Message) (*Message, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*Message, error)
+	GetMessageByID(ctx context.Context, id uuid.UUID) (*Message, error)
 	GetMessagesSince(ctx context.Context, conversationID uuid.UUID, sinceSeq int64, limit int) ([]*Message, bool, error)
 	GetMessagesBefore(ctx context.Context, conversationID uuid.UUID, beforeSeq int64, limit int) ([]*Message, bool, error)
 	SearchMessages(ctx context.Context, conversationID *uuid.UUID, query string, limit int) ([]*Message, error)
 }
 
 type AttachmentRepository interface {
-	Create(ctx context.Context, att *Attachment) (*Attachment, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*Attachment, error)
+	CreateAttachment(ctx context.Context, att *Attachment) (*Attachment, error)
+	GetAttachmentByID(ctx context.Context, id uuid.UUID) (*Attachment, error)
 	UpdateScanStatus(ctx context.Context, id uuid.UUID, status ScanStatus) error
 }
 

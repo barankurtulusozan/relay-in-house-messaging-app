@@ -74,7 +74,7 @@ func (s *AttachmentService) PresignUpload(ctx context.Context, userID uuid.UUID,
 		UploadedBy: userID,
 	}
 
-	savedAtt, err := s.attRepo.Create(ctx, att)
+	savedAtt, err := s.attRepo.CreateAttachment(ctx, att)
 	if err != nil {
 		return "", "", uuid.Nil, err
 	}
@@ -83,7 +83,7 @@ func (s *AttachmentService) PresignUpload(ctx context.Context, userID uuid.UUID,
 }
 
 func (s *AttachmentService) CompleteUpload(ctx context.Context, userID, attachmentID uuid.UUID) error {
-	att, err := s.attRepo.GetByID(ctx, attachmentID)
+	att, err := s.attRepo.GetAttachmentByID(ctx, attachmentID)
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ func (s *AttachmentService) CompleteUpload(ctx context.Context, userID, attachme
 }
 
 func (s *AttachmentService) GetDownloadURL(ctx context.Context, userID, attachmentID uuid.UUID) (string, error) {
-	att, err := s.attRepo.GetByID(ctx, attachmentID)
+	att, err := s.attRepo.GetAttachmentByID(ctx, attachmentID)
 	if err != nil {
 		return "", err
 	}

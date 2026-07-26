@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"company-chat/server/internal/auth"
 	"company-chat/server/internal/config"
@@ -151,7 +152,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	userID, _ := config.GetUserIDFromContext(r.Context())
-	user, err := s.userRepo.GetByID(r.Context(), userID)
+	user, err := s.userRepo.GetUserByID(r.Context(), userID)
 	if err != nil {
 		http.Error(w, `{"error":"user not found"}`, http.StatusNotFound)
 		return

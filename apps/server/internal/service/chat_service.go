@@ -62,7 +62,7 @@ func (s *ChatService) CreateConversation(ctx context.Context, creatorID uuid.UUI
 		CreatedBy: creatorID,
 	}
 
-	return s.convRepo.Create(ctx, conv, memberIDs)
+	return s.convRepo.CreateConversation(ctx, conv, memberIDs)
 }
 
 func (s *ChatService) GetUserConversations(ctx context.Context, userID uuid.UUID) ([]*domain.Conversation, error) {
@@ -105,7 +105,7 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID uuid.UUID, msgID
 	}
 
 	// Fetch sender details
-	sender, _ := s.userRepo.GetByID(ctx, senderID)
+	sender, _ := s.userRepo.GetUserByID(ctx, senderID)
 	savedMsg.Sender = sender
 
 	// 4. Publish domain event to Redis for WS delivery

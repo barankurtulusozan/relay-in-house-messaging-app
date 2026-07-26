@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"company-chat/server/internal/auth"
-	"company-chat/server/internal/domain"
 
 	"github.com/google/uuid"
 	"nhooyr.io/websocket"
@@ -15,7 +14,7 @@ import (
 type Client struct {
 	hub        *Hub
 	conn       *websocket.Conn
-	userID     uuid.UUID
+	UserID     uuid.UUID
 	sendChan   chan []byte
 	jwtManager *auth.JWTManager
 }
@@ -31,7 +30,7 @@ func NewClient(hub *Hub, conn *websocket.Conn, jwtManager *auth.JWTManager) *Cli
 
 func (c *Client) ReadLoop(ctx context.Context) {
 	defer func() {
-		if c.userID != uuid.Nil {
+		if c.UserID != uuid.Nil {
 			c.hub.Unregister(c)
 		}
 		c.conn.Close(websocket.StatusNormalClosure, "")
@@ -59,13 +58,13 @@ func (c *Client) ReadLoop(ctx context.Context) {
 		return
 	}
 
-	c.userID = claims.UserID
+	c.UserID = claims.UserID
 	c.hub.Register(c)
 
 	// Send auth.ok frame
 	authOK, _ := EncodeFrame(OutboundFrame{
 		Type:   FrameAuthOK,
-		UserID: &c.userID,
+		UserID: &c.UserID,
 	})
 	c.sendChan <- authOK
 
@@ -99,7 +98,7 @@ func (c *Client) handleInboundFrame(ctx context.Context, frame *InboundFrame) {
 			msgID = *frame.ID
 		}
 
-		savedMsg, err := c.hub.chatService.SendMessage(ctx, c.userID, msgID, *frame.ConversationID, frame.Body, frame.ReplyToID)
+		savedMsg, err := c.hub.chatService.SendMessage(ctx, c.UserID, msgID, *frame.ConversationID, frame.Body, frame.ReplyToID)
 		if err != nil {
 			errBytes, _ := EncodeFrame(OutboundFrame{Type: FrameError, Error: err.Error()})
 			c.sendChan <- errBytes
@@ -118,17 +117,17 @@ func (c *Client) handleInboundFrame(ctx context.Context, frame *InboundFrame) {
 	case FrameTypingStart, FrameTypingStop:
 		if frame.ConversationID != nil {
 			isTyping := frame.Type == FrameTypingStart
-			_ = c.hub.presence.SetTyping(ctx, *frame.ConversationID, c.userID, isTyping)
+			_ = c.hub.presence.SetTyping(ctx, *frame.ConversationID, c.UserID, isTyping)
 		}
 
 	case FrameReadAck:
 		if frame.ConversationID != nil && frame.MessageID != nil {
-			_ = c.hub.chatService.MarkRead(ctx, c.userID, *frame.ConversationID, *frame.MessageID)
+			_ = c.hub.chatService.MarkRead(ctx, c.UserID, *frame.ConversationID, *frame.MessageID)
 		}
 
 	case FrameSyncReq:
 		if frame.ConversationID != nil && frame.SinceSeq != nil {
-			messages, hasMore, err := c.hub.chatService.SyncMessages(ctx, c.userID, *frame.ConversationID, *frame.SinceSeq, 50)
+			messages, hasMore, err := c.hub.chatService.SyncMessages(ctx, c.UserID, *frame.ConversationID, *frame.SinceSeq, 50)
 			if err == nil {
 				syncBytes, _ := EncodeFrame(OutboundFrame{
 					Type:           FrameSyncBatch,

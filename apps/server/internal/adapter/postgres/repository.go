@@ -2,8 +2,6 @@ package postgres
 
 import (
 	"context"
-	"errors"
-	"time"
 
 	"company-chat/server/internal/domain"
 
@@ -44,7 +42,7 @@ func (r *Repository) UpsertOIDCUser(ctx context.Context, oidcSub, email, name st
 	return &u, nil
 }
 
-func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	query := `SELECT id, oidc_subject, email, display_name, avatar_url, status, created_at, last_seen_at FROM users WHERE id = $1`
 	row := r.pool.QueryRow(ctx, query, id)
 
@@ -65,7 +63,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, id uuid.UUID, status doma
 }
 
 // Conversation Repository Implementation
-func (r *Repository) Create(ctx context.Context, conv *domain.Conversation, memberIDs []uuid.UUID) (*domain.Conversation, error) {
+func (r *Repository) CreateConversation(ctx context.Context, conv *domain.Conversation, memberIDs []uuid.UUID) (*domain.Conversation, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
