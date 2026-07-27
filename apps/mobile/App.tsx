@@ -10,9 +10,20 @@ import {
   StatusBar,
   Alert,
   ActivityIndicator,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import Constants from 'expo-constants';
-import { APIClient, WSClient, SyncEngine, MemoryStorageDriver, Conversation, LocalMessage, User } from '@company-chat/shared';
+import {
+  APIClient,
+  WSClient,
+  SyncEngine,
+  MemoryStorageDriver,
+  Conversation,
+  LocalMessage,
+  User,
+  generateUUID,
+} from '@company-chat/shared';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 
@@ -37,6 +48,41 @@ function getBackendWSHost(): string {
   return httpUrl.replace(/^http/, 'ws') + '/ws';
 }
 
+const DEFAULT_COMPANY_USERS: User[] = [
+  {
+    id: 'user-alice',
+    oidc_subject: 'oidc-alice',
+    email: 'alice@company.com',
+    display_name: 'Alice Vance',
+    status: 'online',
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'user-charlie',
+    oidc_subject: 'oidc-charlie',
+    email: 'charlie@company.com',
+    display_name: 'Charlie Davis',
+    status: 'online',
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'user-diana',
+    oidc_subject: 'oidc-diana',
+    email: 'diana@company.com',
+    display_name: 'Diana Prince',
+    status: 'away',
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'user-evan',
+    oidc_subject: 'oidc-evan',
+    email: 'evan@company.com',
+    display_name: 'Evan Wright',
+    status: 'offline',
+    created_at: new Date().toISOString(),
+  },
+];
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User>({
     id: 'local-user',
@@ -52,6 +98,15 @@ export default function App() {
   const [inputText, setInputText] = useState('');
   const [isOffline, setIsOffline] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+
+  // New Chat Modal States
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalTab, setModalTab] = useState<'direct' | 'group'>('direct');
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<User[]>(DEFAULT_COMPANY_USERS);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+  const [groupNameInput, setGroupNameInput] = useState('');
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
   const apiClientRef = useRef<APIClient>(new APIClient(getBackendHost()));
   const wsClientRef = useRef<WSClient>(new WSClient(getBackendWSHost()));
@@ -93,21 +148,11 @@ export default function App() {
     } catch (err: any) {
       setIsOffline(true);
 
-      // Populate default offline user & fallback conversation if not logged in
-      setCurrentUser((prev) => prev || {
-        id: 'offline-user',
-        oidc_subject: 'oidc-mobile-user',
-        email: 'bob@company.com',
-        display_name: 'Bob Smith',
-        status: 'offline',
-        created_at: new Date().toISOString(),
-      });
-
       const fallbackConv: Conversation = {
-        id: 'offline-general',
+        id: 'default-general',
         type: 'group',
-        name: 'General (Offline)',
-        created_by: 'offline-user',
+        name: 'General Chat',
+        created_by: 'local-user',
         created_at: new Date().toISOString(),
       };
 
@@ -121,7 +166,6 @@ export default function App() {
   useEffect(() => {
     connectAndLoad(false);
 
-    // Check server status every 1 minute (60,000 ms)
     const checkInterval = setInterval(() => {
       connectAndLoad(false);
     }, 60000);
@@ -165,6 +209,107 @@ export default function App() {
       wsClientRef.current.off('message.new', handleNew);
     };
   }, [activeConv]);
+
+  // User Search Functionality
+  const handleUserSearch = async (query: string) => {
+    setUserSearchQuery(query);
+    if (!query.trim()) {
+      setSearchResults(DEFAULT_COMPANY_USERS);
+      return;
+    }
+
+    setIsSearchingUsers(true);
+    try {
+      if (!isOffline) {
+        const users = await apiClientRef.current.searchUsers(query);
+        const filtered = users.filter((u) => u.id !== currentUser.id);
+        setSearchResults(filtered.length > 0 ? filtered : DEFAULT_COMPANY_USERS.filter((u) =>
+          u.display_name.toLowerCase().includes(query.toLowerCase()) ||
+          u.email.toLowerCase().includes(query.toLowerCase())
+        ));
+      } else {
+        const filtered = DEFAULT_COMPANY_USERS.filter((u) =>
+          u.display_name.toLowerCase().includes(query.toLowerCase()) ||
+          u.email.toLowerCase().includes(query.toLowerCase())
+        );
+        setSearchResults(filtered);
+      }
+    } catch (e) {
+      // Fallback local search
+      const filtered = DEFAULT_COMPANY_USERS.filter((u) =>
+        u.display_name.toLowerCase().includes(query.toLowerCase()) ||
+        u.email.toLowerCase().includes(query.toLowerCase())
+      );
+      setSearchResults(filtered);
+    } finally {
+      setIsSearchingUsers(false);
+    }
+  };
+
+  // Start 1:1 Personal Chat
+  const handleStartDirectChat = async (targetUser: User) => {
+    try {
+      let newConv: Conversation;
+      if (!isOffline) {
+        newConv = await apiClientRef.current.createConversation('direct', [targetUser.id]);
+      } else {
+        newConv = {
+          id: `direct-${targetUser.id}`,
+          type: 'direct',
+          name: targetUser.display_name,
+          created_by: currentUser.id,
+          created_at: new Date().toISOString(),
+        };
+      }
+
+      setConversations((prev) => {
+        const exists = prev.find((c) => c.id === newConv.id);
+        return exists ? prev : [newConv, ...prev];
+      });
+      setActiveConv(newConv);
+      setIsModalOpen(false);
+      setUserSearchQuery('');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Could not start chat.');
+    }
+  };
+
+  // Create Group Chat
+  const handleCreateGroupChat = async () => {
+    if (!groupNameInput.trim()) {
+      Alert.alert('Required', 'Please enter a name for the group chat.');
+      return;
+    }
+
+    try {
+      let newConv: Conversation;
+      if (!isOffline) {
+        newConv = await apiClientRef.current.createConversation('group', selectedUserIds, groupNameInput.trim());
+      } else {
+        newConv = {
+          id: `group-${generateUUID()}`,
+          type: 'group',
+          name: groupNameInput.trim(),
+          created_by: currentUser.id,
+          created_at: new Date().toISOString(),
+        };
+      }
+
+      setConversations((prev) => [newConv, ...prev]);
+      setActiveConv(newConv);
+      setIsModalOpen(false);
+      setGroupNameInput('');
+      setSelectedUserIds([]);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Could not create group.');
+    }
+  };
+
+  const handleToggleSelectUser = (userId: string) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
 
   const handleSend = async () => {
     if (!inputText.trim() || !activeConv || !currentUser || !syncEngineRef.current) return;
@@ -214,16 +359,40 @@ export default function App() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Text style={styles.headerTitle}>{activeConv?.name || 'Relay Mobile'}</Text>
-          <View style={[styles.statusBadge, isOffline ? styles.badgeOffline : styles.badgeOnline]}>
-            <Text style={styles.statusBadgeText}>
-              {isOffline ? '● Offline' : '● Online'}
-            </Text>
+          <View>
+            <Text style={styles.headerTitle}>{activeConv?.name || 'Relay Mobile'}</Text>
+            <Text style={styles.headerSub}>User: {currentUser.display_name}</Text>
+          </View>
+
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.newChatBtn} onPress={() => setIsModalOpen(true)}>
+              <Text style={styles.newChatBtnText}>+ New Chat</Text>
+            </TouchableOpacity>
+            <View style={[styles.statusBadge, isOffline ? styles.badgeOffline : styles.badgeOnline]}>
+              <Text style={styles.statusBadgeText}>{isOffline ? '● Offline' : '● Online'}</Text>
+            </View>
           </View>
         </View>
-        <Text style={styles.headerSub}>
-          User: {currentUser.display_name}
-        </Text>
+
+        {/* Conversation Switcher Bar */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.convBar}>
+          {conversations.map((conv) => {
+            const isActive = activeConv?.id === conv.id;
+            const isDirect = conv.type === 'direct';
+            return (
+              <TouchableOpacity
+                key={conv.id}
+                style={[styles.convPill, isActive && styles.convPillActive]}
+                onPress={() => setActiveConv(conv)}
+              >
+                <Text style={[styles.convPillText, isActive && styles.convPillTextActive]}>
+                  {isDirect ? '👤 ' : '👥 '}
+                  {conv.name || 'Chat'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Non-distracting Offline Status Banner */}
@@ -298,6 +467,102 @@ export default function App() {
           <Text style={styles.sendText}>Send</Text>
         </TouchableOpacity>
       </View>
+
+      {/* New Chat Modal (User Search & Group Creation) */}
+      <Modal visible={isModalOpen} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Start New Chat</Text>
+              <TouchableOpacity onPress={() => setIsModalOpen(false)}>
+                <Text style={styles.modalCloseBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Modal Tabs */}
+            <View style={styles.modalTabs}>
+              <TouchableOpacity
+                style={[styles.modalTab, modalTab === 'direct' && styles.modalTabActive]}
+                onPress={() => setModalTab('direct')}
+              >
+                <Text style={[styles.modalTabText, modalTab === 'direct' && styles.modalTabTextActive]}>
+                  👤 Personal 1:1
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalTab, modalTab === 'group' && styles.modalTabActive]}
+                onPress={() => setModalTab('group')}
+              >
+                <Text style={[styles.modalTabText, modalTab === 'group' && styles.modalTabTextActive]}>
+                  👥 Group Chat
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {modalTab === 'direct' ? (
+              <View style={styles.modalBody}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search user by name or email..."
+                  placeholderTextColor="#9ca3af"
+                  value={userSearchQuery}
+                  onChangeText={handleUserSearch}
+                />
+                {isSearchingUsers && <ActivityIndicator color="#818cf8" style={{ marginVertical: 10 }} />}
+
+                <FlatList
+                  data={searchResults}
+                  keyExtractor={(u) => u.id}
+                  style={{ maxHeight: 260 }}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity style={styles.userRow} onPress={() => handleStartDirectChat(item)}>
+                      <View style={styles.avatarCircle}>
+                        <Text style={styles.avatarText}>{item.display_name.charAt(0)}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.userName}>{item.display_name}</Text>
+                        <Text style={styles.userEmail}>{item.email}</Text>
+                      </View>
+                      <Text style={styles.startBtnText}>Chat →</Text>
+                    </TouchableOpacity>
+                  )}
+                />
+              </View>
+            ) : (
+              <View style={styles.modalBody}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Group Name (e.g. Mobile Devs)..."
+                  placeholderTextColor="#9ca3af"
+                  value={groupNameInput}
+                  onChangeText={setGroupNameInput}
+                />
+                <Text style={styles.sectionLabel}>Select Members:</Text>
+                <FlatList
+                  data={DEFAULT_COMPANY_USERS}
+                  keyExtractor={(u) => u.id}
+                  style={{ maxHeight: 180 }}
+                  renderItem={({ item }) => {
+                    const isSelected = selectedUserIds.includes(item.id);
+                    return (
+                      <TouchableOpacity
+                        style={[styles.userRow, isSelected && styles.userRowSelected]}
+                        onPress={() => handleToggleSelectUser(item.id)}
+                      >
+                        <Text style={styles.checkIcon}>{isSelected ? '☑' : '☐'}</Text>
+                        <Text style={styles.userName}>{item.display_name}</Text>
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
+                <TouchableOpacity style={styles.createGroupBtn} onPress={handleCreateGroupChat}>
+                  <Text style={styles.createGroupBtnText}>Create Group Chat</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -309,7 +574,8 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
     backgroundColor: '#111827',
     borderBottomWidth: 1,
     borderBottomColor: '#1f2937',
@@ -319,10 +585,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#818cf8',
+  },
+  headerSub: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginTop: 2,
+  },
+  newChatBtn: {
+    backgroundColor: '#4f46e5',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  newChatBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -340,10 +627,31 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#34d399',
   },
-  headerSub: {
-    fontSize: 12,
+  convBar: {
+    marginTop: 10,
+    flexDirection: 'row',
+  },
+  convPill: {
+    backgroundColor: '#1f2937',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#374151',
+  },
+  convPillActive: {
+    backgroundColor: '#4f46e5',
+    borderColor: '#6366f1',
+  },
+  convPillText: {
     color: '#9ca3af',
-    marginTop: 2,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  convPillTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
   },
   offlineBanner: {
     backgroundColor: '#1e1b4b',
@@ -447,5 +755,134 @@ const styles = StyleSheet.create({
   sendText: {
     color: '#ffffff',
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContainer: {
+    width: '100%',
+    backgroundColor: '#111827',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#818cf8',
+  },
+  modalCloseBtn: {
+    color: '#9ca3af',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalTabs: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    backgroundColor: '#1f2937',
+    borderRadius: 8,
+    padding: 3,
+  },
+  modalTab: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  modalTabActive: {
+    backgroundColor: '#4f46e5',
+  },
+  modalTabText: {
+    color: '#9ca3af',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalTabTextActive: {
+    color: '#ffffff',
+  },
+  modalBody: {
+    marginTop: 4,
+  },
+  searchInput: {
+    backgroundColor: '#1f2937',
+    color: '#ffffff',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f2937',
+  },
+  userRowSelected: {
+    backgroundColor: 'rgba(79, 70, 229, 0.2)',
+    borderRadius: 8,
+  },
+  avatarCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#3730a3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  avatarText: {
+    color: '#c7d2fe',
+    fontWeight: '700',
+  },
+  userName: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  userEmail: {
+    color: '#9ca3af',
+    fontSize: 12,
+  },
+  startBtnText: {
+    color: '#818cf8',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  sectionLabel: {
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  checkIcon: {
+    color: '#818cf8',
+    fontSize: 16,
+    marginRight: 10,
+  },
+  createGroupBtn: {
+    backgroundColor: '#6366f1',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  createGroupBtnText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

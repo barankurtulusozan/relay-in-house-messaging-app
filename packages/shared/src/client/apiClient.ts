@@ -59,6 +59,12 @@ export class APIClient {
     return this.request('/api/me');
   }
 
+  async searchUsers(query: string): Promise<User[]> {
+    const params = new URLSearchParams({ q: query });
+    const res = await this.request<User[]>(`/api/users/search?${params.toString()}`);
+    return Array.isArray(res) ? res : [];
+  }
+
   async getConversations(): Promise<Conversation[]> {
     const res = await this.request<Conversation[]>('/api/conversations');
     return Array.isArray(res) ? res : [];
@@ -68,6 +74,26 @@ export class APIClient {
     return this.request('/api/conversations', {
       method: 'POST',
       body: JSON.stringify({ type, name, member_ids: memberIDs }),
+    });
+  }
+
+  async updateGroupTitle(conversationId: string, name: string): Promise<{ status: string }> {
+    return this.request(`/api/conversations/${conversationId}/name`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async addGroupMember(conversationId: string, userId: string, role = 'member'): Promise<{ status: string }> {
+    return this.request(`/api/conversations/${conversationId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, role }),
+    });
+  }
+
+  async removeGroupMember(conversationId: string, userId: string): Promise<{ status: string }> {
+    return this.request(`/api/conversations/${conversationId}/members/${userId}`, {
+      method: 'DELETE',
     });
   }
 

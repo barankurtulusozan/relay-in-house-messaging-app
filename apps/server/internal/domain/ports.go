@@ -35,10 +35,13 @@ type UserRepository interface {
 	UpsertOIDCUser(ctx context.Context, oidcSub, email, name string, avatarURL *string) (*User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (*User, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status UserStatus) error
+	SearchUsers(ctx context.Context, query string, limit int) ([]*User, error)
 }
 
 type ConversationRepository interface {
 	CreateConversation(ctx context.Context, conv *Conversation, memberIDs []uuid.UUID) (*Conversation, error)
+	FindDirectConversation(ctx context.Context, userA, userB uuid.UUID) (*Conversation, error)
+	UpdateConversationName(ctx context.Context, id uuid.UUID, name string) error
 	GetConversationByID(ctx context.Context, id uuid.UUID) (*Conversation, error)
 	GetUserConversations(ctx context.Context, userID uuid.UUID) ([]*Conversation, error)
 	IsMember(ctx context.Context, conversationID, userID uuid.UUID) (bool, error)

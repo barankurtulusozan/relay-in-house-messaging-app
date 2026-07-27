@@ -84,9 +84,13 @@ func (s *Server) setupRoutes() {
 
 		r.Get("/api/me", s.handleGetMe)
 
+		// Users
+		r.Get("/api/users/search", s.handleSearchUsers)
+
 		// Conversations
 		r.Get("/api/conversations", s.handleGetConversations)
 		r.Post("/api/conversations", s.handleCreateConversation)
+		r.Put("/api/conversations/{id}/name", s.handleUpdateConversationName)
 		r.Get("/api/conversations/{id}/messages", s.handleGetMessages)
 		r.Get("/api/conversations/{id}/members", s.handleGetMembers)
 		r.Post("/api/conversations/{id}/members", s.handleAddMember)
@@ -165,6 +169,16 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, user)
 }
 
+func (s *Server) handleSearchUsers(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	users, err := s.userRepo.SearchUsers(r.Context(), q, 20)
+	if err != nil {
+		http.Error(w, `{"error":"failed to search users"}`, http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, users)
+}
+
 func (s *Server) handleGetConversations(w http.ResponseWriter, r *http.Request) {
 	userID, _ := config.GetUserIDFromContext(r.Context())
 	convs, err := s.chatService.GetUserConversations(r.Context(), userID)
@@ -196,6 +210,32 @@ func (s *Server) handleCreateConversation(w http.ResponseWriter, r *http.Request
 		return
 	}
 	jsonResponse(w, conv)
+}
+
+type UpdateConversationNameRequest struct {
+	Name string `json:"name"`
+}
+
+func (s *Server) handleUpdateConversationName(w http.ResponseWriter, r *http.Request) {
+	userID, _ := config.GetUserIDFromContext(r.Context())
+	convID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, `{"error":"invalid conversation id"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req UpdateConversationNameRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
+		http.Error(w, `{"error":"invalid request name"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := s.chatService.UpdateConversationName(r.Context(), convID, userID, req.Name); err != nil {
+		http.Error(w, `{"error":"failed to update conversation name"}`, http.StatusInternalServerError)
+		return
+	}
+
+	jsonResponse(w, map[string]string{"status": "ok"})
 }
 
 func (s *Server) handleGetMessages(w http.ResponseWriter, r *http.Request) {

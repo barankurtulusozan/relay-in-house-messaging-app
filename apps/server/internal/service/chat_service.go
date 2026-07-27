@@ -56,6 +56,14 @@ func (s *ChatService) CreateConversation(ctx context.Context, creatorID uuid.UUI
 		memberIDs = append(memberIDs, creatorID)
 	}
 
+	// Idempotent lookup for 1:1 direct chats
+	if convType == domain.ConversationDirect && len(memberIDs) == 2 {
+		existing, err := s.convRepo.FindDirectConversation(ctx, memberIDs[0], memberIDs[1])
+		if err == nil && existing != nil {
+			return existing, nil
+		}
+	}
+
 	conv := &domain.Conversation{
 		Type:      convType,
 		Name:      name,
@@ -63,6 +71,14 @@ func (s *ChatService) CreateConversation(ctx context.Context, creatorID uuid.UUI
 	}
 
 	return s.convRepo.CreateConversation(ctx, conv, memberIDs)
+}
+
+func (s *ChatService) UpdateConversationName(ctx context.Context, conversationID, userID uuid.UUID, name string) error {
+	isMember, err := s.convRepo.IsMember(ctx, conversationID, userID)
+	if err != nil || !isMember {
+		return errors.New("unauthorized: user is not a conversation member")
+	}
+	return s.convRepo.UpdateConversationName(ctx, conversationID, name)
 }
 
 func (s *ChatService) GetUserConversations(ctx context.Context, userID uuid.UUID) ([]*domain.Conversation, error) {

@@ -62,6 +62,43 @@ func (r *Repository) UpdateStatus(ctx context.Context, id uuid.UUID, status doma
 	return err
 }
 
+func (r *Repository) SearchUsers(ctx context.Context, query string, limit int) ([]*domain.User, error) {
+	if r.pool == nil {
+		return []*domain.User{}, nil
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	q := "%" + query + "%"
+	sql := `
+		SELECT id, oidc_subject, email, display_name, avatar_url, status, created_at, last_seen_at
+		FROM users
+		WHERE display_name ILIKE $1 OR email ILIKE $1
+		ORDER BY display_name ASC
+		LIMIT $2
+	`
+	rows, err := r.pool.Query(ctx, sql, q, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*domain.User
+	for rows.Next() {
+		var u domain.User
+		var statusStr string
+		if err := rows.Scan(&u.ID, &u.OIDCSubject, &u.Email, &u.DisplayName, &u.AvatarURL, &statusStr, &u.CreatedAt, &u.LastSeenAt); err != nil {
+			return nil, err
+		}
+		u.Status = domain.UserStatus(statusStr)
+		users = append(users, &u)
+	}
+	if users == nil {
+		users = []*domain.User{}
+	}
+	return users, nil
+}
+
 // Conversation Repository Implementation
 func (r *Repository) CreateConversation(ctx context.Context, conv *domain.Conversation, memberIDs []uuid.UUID) (*domain.Conversation, error) {
 	tx, err := r.pool.Begin(ctx)
@@ -104,6 +141,44 @@ func (r *Repository) CreateConversation(ctx context.Context, conv *domain.Conver
 	}
 
 	return &c, nil
+}
+
+func (r *Repository) FindDirectConversation(ctx context.Context, userA, userB uuid.UUID) (*domain.Conversation, error) {
+	if r.pool == nil {
+		return nil, nil
+	}
+	query := `
+		SELECT c.id, c.type, c.name, c.created_by, c.created_at
+		FROM conversations c
+		JOIN conversation_members cm1 ON c.id = cm1.conversation_id
+		JOIN conversation_members cm2 ON c.id = cm2.conversation_id
+		WHERE c.type = 'direct'
+		  AND cm1.user_id = $1
+		  AND cm2.user_id = $2
+		LIMIT 1
+	`
+	row := r.pool.QueryRow(ctx, query, userA, userB)
+
+	var c domain.Conversation
+	var typeStr string
+	err := row.Scan(&c.ID, &typeStr, &c.Name, &c.CreatedBy, &c.CreatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	c.Type = domain.ConversationType(typeStr)
+	return &c, nil
+}
+
+func (r *Repository) UpdateConversationName(ctx context.Context, id uuid.UUID, name string) error {
+	if r.pool == nil {
+		return nil
+	}
+	query := `UPDATE conversations SET name = $1 WHERE id = $2`
+	_, err := r.pool.Exec(ctx, query, name, id)
+	return err
 }
 
 func (r *Repository) GetConversationByID(ctx context.Context, id uuid.UUID) (*domain.Conversation, error) {
