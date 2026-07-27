@@ -67,6 +67,11 @@ func (s *Server) setupRoutes() {
 		AllowCredentials: true,
 	}))
 
+	// Health Check Endpoint
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, map[string]string{"status": "ok"})
+	})
+
 	// WebSocket Endpoint
 	r.Get("/ws", s.handleWebSocket)
 

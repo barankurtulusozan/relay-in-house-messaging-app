@@ -33,7 +33,8 @@ export class MemoryStorageDriver implements ILocalStorageDriver {
   async getMessages(conversationId: string, limit = 50): Promise<LocalMessage[]> {
     const list = Array.from(this.messages.values())
       .filter((m) => m.conversation_id === conversationId)
-      .slice(0, limit);
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .slice(-limit);
     return list;
   }
 

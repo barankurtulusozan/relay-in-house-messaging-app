@@ -10,15 +10,30 @@ importers:
 
   apps/mobile:
     dependencies:
+      '@babel/runtime':
+        specifier: ^7.20.0
+        version: 7.29.7
       '@company-chat/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@react-native/assets-registry':
+        specifier: ^0.86.1
+        version: 0.86.1
       expo:
         specifier: ~51.0.0
         version: 51.0.39(@babel/core@7.29.7)(@babel/preset-env@7.29.7)(react-native@0.74.1)(react@18.2.0)
+      expo-asset:
+        specifier: ~10.0.10
+        version: 10.0.10(expo@51.0.39)
+      expo-constants:
+        specifier: ^57.0.7
+        version: 57.0.7(expo@51.0.39)(react-native@0.74.1)
       expo-file-system:
         specifier: ~17.0.1
         version: 17.0.1(expo@51.0.39)
+      expo-modules-core:
+        specifier: ~1.12.26
+        version: 1.12.26
       expo-sharing:
         specifier: ~12.0.1
         version: 12.0.1(expo@51.0.39)
@@ -1837,7 +1852,7 @@ packages:
 
   /@expo/bunyan@4.0.1:
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
-    engines: {node: '>=0.10.0'}
+    engines: {'0': node >=0.10.0}
     dependencies:
       uuid: 8.3.2
     dev: false
@@ -1999,6 +2014,17 @@ packages:
       dotenv: 16.4.7
       dotenv-expand: 11.0.7
       getenv: 1.0.0
+    transitivePeerDependencies:
+      - supports-color
+    dev: false
+
+  /@expo/env@2.4.2:
+    resolution: {integrity: sha512-28pqaEqwnmLduZ00Pq9HkSzE5wbj1MTwp5/n8nm8rD8MCjR9eUnVOwmNksPI3Be2ReAPO/DbPn1puy0mvoocsQ==}
+    engines: {node: '>=20.12.0'}
+    dependencies:
+      chalk: 4.1.2
+      debug: 4.4.3
+      getenv: 2.0.0
     transitivePeerDependencies:
       - supports-color
     dev: false
@@ -2590,6 +2616,11 @@ packages:
   /@react-native/assets-registry@0.74.83:
     resolution: {integrity: sha512-2vkLMVnp+YTZYTNSDIBZojSsjz8sl5PscP3j4GcV6idD8V978SZfwFlk8K0ti0BzRs11mzL0Pj17km597S/eTQ==}
     engines: {node: '>=18'}
+    dev: false
+
+  /@react-native/assets-registry@0.86.1:
+    resolution: {integrity: sha512-Vfk+y6KeMyZXvHffwrFFlLQo6HxV5idub6hOl/1hkxwmPaqxaCC90hViMeioHHZnom+Hqtd36OKAMfp5T1u8pg==}
+    engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
     dev: false
 
   /@react-native/babel-plugin-codegen@0.74.83(@babel/preset-env@7.29.7):
@@ -4590,6 +4621,19 @@ packages:
       - supports-color
     dev: false
 
+  /expo-constants@57.0.7(expo@51.0.39)(react-native@0.74.1):
+    resolution: {integrity: sha512-ShDwaKnh3UieCQ/dG0kO8PuicTTatn3WDGmXbq/fukyzPXWhdUxf37DINVDQS6D3DDG7nfqItij+QvnDHSQhTg==}
+    peerDependencies:
+      expo: '*'
+      react-native: '*'
+    dependencies:
+      '@expo/env': 2.4.2
+      expo: 51.0.39(@babel/core@7.29.7)(@babel/preset-env@7.29.7)(react-native@0.74.1)(react@18.2.0)
+      react-native: 0.74.1(@babel/core@7.29.7)(@babel/preset-env@7.29.7)(@types/react@18.2.79)(react@18.2.0)
+    transitivePeerDependencies:
+      - supports-color
+    dev: false
+
   /expo-file-system@17.0.1(expo@51.0.39):
     resolution: {integrity: sha512-dYpnZJqTGj6HCYJyXAgpFkQWsiCH3HY1ek2cFZVHFoEc5tLz9gmdEgTF6nFHurvmvfmXqxi7a5CXyVm0aFYJBw==}
     peerDependencies:
@@ -5010,6 +5054,11 @@ packages:
 
   /getenv@1.0.0:
     resolution: {integrity: sha512-7yetJWqbS9sbn0vIfliPsFgoXMKn/YMF+Wuiog97x+urnSRRRZ7xB+uVkwGKzRgq9CDFfMQnE9ruL5DHv9c6Xg==}
+    engines: {node: '>=6'}
+    dev: false
+
+  /getenv@2.0.0:
+    resolution: {integrity: sha512-VilgtJj/ALgGY77fiLam5iD336eSWi96Q15JSAG1zi8NRBysm3LXKdGnHb4m5cuyxvOLQQKWpBZAT6ni4FI2iQ==}
     engines: {node: '>=6'}
     dev: false
 

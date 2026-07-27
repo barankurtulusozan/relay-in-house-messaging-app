@@ -9,12 +9,17 @@
     "ios": "expo run:ios"
   },
   "dependencies": {
+    "@babel/runtime": "^7.20.0",
     "@company-chat/shared": "workspace:*",
+    "@react-native/assets-registry": "^0.86.1",
     "expo": "~51.0.0",
-    "react": "18.2.0",
-    "react-native": "0.74.1",
+    "expo-asset": "~10.0.10",
+    "expo-constants": "^57.0.7",
+    "expo-file-system": "~17.0.1",
+    "expo-modules-core": "~1.12.26",
     "expo-sharing": "~12.0.1",
-    "expo-file-system": "~17.0.1"
+    "react": "18.2.0",
+    "react-native": "0.74.1"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

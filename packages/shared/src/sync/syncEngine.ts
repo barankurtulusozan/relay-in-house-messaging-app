@@ -2,6 +2,7 @@ import { ILocalStorageDriver } from '../storage/IDriver.js';
 import { WSClient } from '../client/wsClient.js';
 import { APIClient } from '../client/apiClient.js';
 import { LocalMessage, OutboxItem } from '../types/models.js';
+import { generateUUID } from '../utils/uuid.js';
 
 export class SyncEngine {
   private driver: ILocalStorageDriver;
@@ -39,7 +40,7 @@ export class SyncEngine {
   }
 
   async sendMessage(conversationId: string, senderId: string, body?: string, replyToId?: string): Promise<LocalMessage> {
-    const id = crypto.randomUUID();
+    const id = generateUUID();
     const now = new Date().toISOString();
 
     const localMsg: LocalMessage = {
@@ -65,8 +66,8 @@ export class SyncEngine {
     await this.driver.saveMessage(localMsg);
     await this.driver.saveOutboxItem(outboxItem);
 
-    // Immediate flush attempt
-    this.flushOutbox();
+    // Immediate flush attempt (catch errors silently when offline)
+    this.flushOutbox().catch(() => {});
 
     return localMsg;
   }
@@ -80,23 +81,29 @@ export class SyncEngine {
       for (const item of items) {
         this.wsClient.sendMessage(item.id, item.conversation_id, item.body, item.reply_to_id);
       }
+    } catch (e) {
+      // Offline mode: WebSocket send attempts ignored until connection is restored
     } finally {
       this.isFlushing = false;
     }
   }
 
   async syncConversation(conversationId: string): Promise<LocalMessage[]> {
-    const cursor = await this.driver.getSyncCursor(conversationId);
-    const result = await this.apiClient.getMessages(conversationId, cursor > 0 ? cursor : undefined, 50);
+    try {
+      const cursor = await this.driver.getSyncCursor(conversationId);
+      const result = await this.apiClient.getMessages(conversationId, cursor > 0 ? cursor : undefined, 50);
 
-    if (result.messages && result.messages.length > 0) {
-      const marked = result.messages.map((m) => ({ ...m, status: 'sent' as const }));
-      await this.driver.saveMessagesBatch(marked);
+      if (result && Array.isArray(result.messages) && result.messages.length > 0) {
+        const marked = result.messages.map((m) => ({ ...m, status: 'sent' as const }));
+        await this.driver.saveMessagesBatch(marked);
 
-      const maxSeq = Math.max(...marked.map((m) => m.server_seq || 0));
-      if (maxSeq > cursor) {
-        await this.driver.setSyncCursor(conversationId, maxSeq);
+        const maxSeq = Math.max(...marked.map((m) => m.server_seq || 0));
+        if (maxSeq > cursor) {
+          await this.driver.setSyncCursor(conversationId, maxSeq);
+        }
       }
+    } catch (err) {
+      // Backend is offline or unreachable - serve cached local messages seamlessly
     }
 
     return this.driver.getMessages(conversationId, 50);

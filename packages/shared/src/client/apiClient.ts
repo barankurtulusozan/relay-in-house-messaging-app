@@ -22,17 +22,25 @@ export class APIClient {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    const res = await fetch(`${this.baseURL}${endpoint}`, {
-      ...options,
-      headers,
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(errBody.error || `HTTP error ${res.status}`);
+    try {
+      const res = await fetch(`${this.baseURL}${endpoint}`, {
+        ...options,
+        headers,
+        signal: options.signal || controller.signal,
+      });
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(errBody.error || `HTTP error ${res.status}`);
+      }
+
+      return await res.json();
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    return res.json();
   }
 
   async login(oidcSubject: string, email: string, displayName: string, avatarURL?: string): Promise<{ token: string; user: User }> {
@@ -52,7 +60,8 @@ export class APIClient {
   }
 
   async getConversations(): Promise<Conversation[]> {
-    return this.request('/api/conversations');
+    const res = await this.request<Conversation[]>('/api/conversations');
+    return Array.isArray(res) ? res : [];
   }
 
   async createConversation(type: 'direct' | 'group', memberIDs: string[], name?: string): Promise<Conversation> {
@@ -66,7 +75,11 @@ export class APIClient {
     const params = new URLSearchParams();
     if (beforeSeq) params.set('before_seq', beforeSeq.toString());
     params.set('limit', limit.toString());
-    return this.request(`/api/conversations/${conversationId}/messages?${params.toString()}`);
+    const res = await this.request<{ messages: LocalMessage[]; has_more: boolean }>(`/api/conversations/${conversationId}/messages?${params.toString()}`);
+    return {
+      messages: Array.isArray(res?.messages) ? res.messages : [],
+      has_more: !!res?.has_more,
+    };
   }
 
   async presignAttachment(messageId: string, fileName: string, mimeType: string, sizeBytes: number): Promise<{ upload_url: string; storage_key: string; attachment_id: string }> {

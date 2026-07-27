@@ -5,3 +5,4 @@ export * from './storage/MemoryStorageDriver.js';
 export * from './client/apiClient.js';
 export * from './client/wsClient.js';
 export * from './sync/syncEngine.js';
+export * from './utils/uuid.js';
