@@ -20,6 +20,7 @@ import (
 )
 
 type Server struct {
+	cfg               *config.Config
 	router            *chi.Mux
 	jwtManager        *auth.JWTManager
 	userRepo          domain.UserRepository
@@ -30,6 +31,7 @@ type Server struct {
 }
 
 func NewServer(
+	cfg *config.Config,
 	jwtManager *auth.JWTManager,
 	userRepo domain.UserRepository,
 	chatService *service.ChatService,
@@ -38,6 +40,7 @@ func NewServer(
 	hub *ws.Hub,
 ) *Server {
 	s := &Server{
+		cfg:               cfg,
 		router:            chi.NewRouter(),
 		jwtManager:        jwtManager,
 		userRepo:          userRepo,
@@ -60,8 +63,14 @@ func (s *Server) setupRoutes() {
 
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+
+	corsOrigins := s.cfg.AllowedCORSOrigins
+	if len(corsOrigins) == 0 {
+		corsOrigins = []string{"http://localhost:3000", "http://localhost:8081"}
+	}
+
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
+		AllowedOrigins:   corsOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,
@@ -72,11 +81,11 @@ func (s *Server) setupRoutes() {
 		jsonResponse(w, map[string]string{"status": "ok"})
 	})
 
-	// WebSocket Endpoint
+	// WebSocket Endpoint (Protected with WS Origin Patterns)
 	r.Get("/ws", s.handleWebSocket)
 
-	// Auth Endpoint (Simulated OIDC Login / Dev Login)
-	r.Post("/api/auth/login", s.handleLogin)
+	// Dev Auth Endpoint (Rate Limited & Production Guarded)
+	r.With(RateLimitMiddleware(10, time.Minute)).Post("/api/auth/login", s.handleLogin)
 
 	// Protected REST API Group
 	r.Group(func(r chi.Router) {
@@ -84,8 +93,8 @@ func (s *Server) setupRoutes() {
 
 		r.Get("/api/me", s.handleGetMe)
 
-		// Users
-		r.Get("/api/users/search", s.handleSearchUsers)
+		// Users (Rate Limited)
+		r.With(RateLimitMiddleware(30, time.Minute)).Get("/api/users/search", s.handleSearchUsers)
 
 		// Conversations
 		r.Get("/api/conversations", s.handleGetConversations)
@@ -111,9 +120,17 @@ func (s *Server) setupRoutes() {
 }
 
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true,
-	})
+	opts := &websocket.AcceptOptions{}
+	if len(s.cfg.AllowedWSOrigins) > 0 {
+		opts.OriginPatterns = s.cfg.AllowedWSOrigins
+	} else if s.cfg.IsProduction() {
+		opts.OriginPatterns = []string{"*.company.com"}
+	} else {
+		// In dev, accept localhost & LAN patterns safely
+		opts.OriginPatterns = []string{"localhost:*", "127.0.0.1:*", "192.168.*:*", "10.*:*"}
+	}
+
+	conn, err := websocket.Accept(w, r, opts)
 	if err != nil {
 		return
 	}
@@ -130,6 +147,11 @@ type LoginRequest struct {
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.IsProduction() {
+		http.Error(w, `{"error":"development authentication disabled in production"}`, http.StatusForbidden)
+		return
+	}
+
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
@@ -277,12 +299,53 @@ func (s *Server) handleGetMembers(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, members)
 }
 
+type AddMemberRequest struct {
+	UserID uuid.UUID         `json:"user_id"`
+	Role   domain.MemberRole `json:"role"`
+}
+
 func (s *Server) handleAddMember(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, `{"status":"ok"}`, http.StatusOK)
+	actorID, _ := config.GetUserIDFromContext(r.Context())
+	convID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, `{"error":"invalid conversation id"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req AddMemberRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.UserID == uuid.Nil {
+		http.Error(w, `{"error":"invalid request parameters"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := s.chatService.AddGroupMember(r.Context(), convID, actorID, req.UserID, req.Role); err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusForbidden)
+		return
+	}
+
+	jsonResponse(w, map[string]string{"status": "ok"})
 }
 
 func (s *Server) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, `{"status":"ok"}`, http.StatusOK)
+	actorID, _ := config.GetUserIDFromContext(r.Context())
+	convID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, `{"error":"invalid conversation id"}`, http.StatusBadRequest)
+		return
+	}
+
+	targetUserID, err := uuid.Parse(chi.URLParam(r, "userId"))
+	if err != nil {
+		http.Error(w, `{"error":"invalid target user id"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := s.chatService.RemoveGroupMember(r.Context(), convID, actorID, targetUserID); err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusForbidden)
+		return
+	}
+
+	jsonResponse(w, map[string]string{"status": "ok"})
 }
 
 type PresignRequest struct {

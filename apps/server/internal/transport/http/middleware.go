@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"company-chat/server/internal/auth"
 	"company-chat/server/internal/config"
@@ -32,6 +34,53 @@ func AuthMiddleware(jwtManager *auth.JWTManager) func(http.Handler) http.Handler
 
 			ctx := context.WithValue(r.Context(), config.UserIDContextKey, claims.UserID)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+type ipRateLimiter struct {
+	mu       sync.Mutex
+	requests map[string][]time.Time
+}
+
+func RateLimitMiddleware(maxReqs int, window time.Duration) func(http.Handler) http.Handler {
+	limiter := &ipRateLimiter{
+		requests: make(map[string][]time.Time),
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip := r.RemoteAddr
+			if forward := r.Header.Get("X-Forwarded-For"); forward != "" {
+				ip = strings.Split(forward, ",")[0]
+			}
+			ip = strings.TrimSpace(ip)
+
+			now := time.Now()
+			cutoff := now.Add(-window)
+
+			limiter.mu.Lock()
+			timestamps := limiter.requests[ip]
+			var valid []time.Time
+			for _, t := range timestamps {
+				if t.After(cutoff) {
+					valid = append(valid, t)
+				}
+			}
+
+			if len(valid) >= maxReqs {
+				limiter.requests[ip] = valid
+				limiter.mu.Unlock()
+				w.Header().Set("Retry-After", "60")
+				http.Error(w, `{"error":"rate limit exceeded"}`, http.StatusTooManyRequests)
+				return
+			}
+
+			valid = append(valid, now)
+			limiter.requests[ip] = valid
+			limiter.mu.Unlock()
+
+			next.ServeHTTP(w, r)
 		})
 	}
 }

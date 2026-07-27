@@ -70,7 +70,7 @@ func main() {
 	hub := ws.NewHub(chatService, redisAdapt, redisAdapt)
 
 	// 7. Instantiating HTTP Server Router
-	srv := transportHTTP.NewServer(jwtManager, pgRepo, chatService, attService, pgRepo, hub)
+	srv := transportHTTP.NewServer(cfg, jwtManager, pgRepo, chatService, attService, pgRepo, hub)
 
 	httpServer := &http.Server{
 		Addr:    ":" + cfg.Port,

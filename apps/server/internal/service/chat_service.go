@@ -74,11 +74,108 @@ func (s *ChatService) CreateConversation(ctx context.Context, creatorID uuid.UUI
 }
 
 func (s *ChatService) UpdateConversationName(ctx context.Context, conversationID, userID uuid.UUID, name string) error {
-	isMember, err := s.convRepo.IsMember(ctx, conversationID, userID)
-	if err != nil || !isMember {
+	members, err := s.convRepo.GetMembers(ctx, conversationID)
+	if err != nil {
+		return err
+	}
+
+	var actorRole domain.MemberRole
+	found := false
+	for _, m := range members {
+		if m.UserID == userID {
+			actorRole = m.Role
+			found = true
+			break
+		}
+	}
+	if !found {
 		return errors.New("unauthorized: user is not a conversation member")
 	}
+	if actorRole != domain.RoleOwner && actorRole != domain.RoleAdmin {
+		return errors.New("unauthorized: only owners or admins can rename the conversation")
+	}
+
 	return s.convRepo.UpdateConversationName(ctx, conversationID, name)
+}
+
+func (s *ChatService) AddGroupMember(ctx context.Context, conversationID, actorID, targetUserID uuid.UUID, role domain.MemberRole) error {
+	members, err := s.convRepo.GetMembers(ctx, conversationID)
+	if err != nil {
+		return err
+	}
+
+	var actorRole domain.MemberRole
+	found := false
+	for _, m := range members {
+		if m.UserID == actorID {
+			actorRole = m.Role
+			found = true
+		}
+		if m.UserID == targetUserID {
+			return errors.New("user is already a member of this conversation")
+		}
+	}
+
+	if !found {
+		return errors.New("unauthorized: actor is not a member of this conversation")
+	}
+
+	if actorRole != domain.RoleOwner && actorRole != domain.RoleAdmin {
+		return errors.New("unauthorized: only owners or admins can add members")
+	}
+
+	if role == "" {
+		role = domain.RoleMember
+	}
+
+	return s.convRepo.AddMember(ctx, conversationID, targetUserID, role)
+}
+
+func (s *ChatService) RemoveGroupMember(ctx context.Context, conversationID, actorID, targetUserID uuid.UUID) error {
+	members, err := s.convRepo.GetMembers(ctx, conversationID)
+	if err != nil {
+		return err
+	}
+
+	var actorRole, targetRole domain.MemberRole
+	var actorFound, targetFound bool
+	for _, m := range members {
+		if m.UserID == actorID {
+			actorRole = m.Role
+			actorFound = true
+		}
+		if m.UserID == targetUserID {
+			targetRole = m.Role
+			targetFound = true
+		}
+	}
+
+	if !actorFound {
+		return errors.New("unauthorized: actor is not a member of this conversation")
+	}
+	if !targetFound {
+		return errors.New("target user is not a member of this conversation")
+	}
+
+	// Self-removal (leaving group)
+	if actorID == targetUserID {
+		if actorRole == domain.RoleOwner && len(members) > 1 {
+			return errors.New("owner must transfer ownership before leaving the group")
+		}
+		return s.convRepo.RemoveMember(ctx, conversationID, targetUserID)
+	}
+
+	// Removal of other members requires owner/admin privileges
+	if actorRole != domain.RoleOwner && actorRole != domain.RoleAdmin {
+		return errors.New("unauthorized: only owners or admins can remove members")
+	}
+
+	// Admins cannot remove owners
+	if targetRole == domain.RoleOwner {
+		return errors.New("unauthorized: admins cannot remove the group owner")
+	}
+
+	return s.convRepo.RemoveMember(ctx, conversationID, targetUserID)
 }
 
 func (s *ChatService) GetUserConversations(ctx context.Context, userID uuid.UUID) ([]*domain.Conversation, error) {

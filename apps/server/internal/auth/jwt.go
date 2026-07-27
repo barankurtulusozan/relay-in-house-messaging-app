@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -20,6 +21,9 @@ type JWTManager struct {
 }
 
 func NewJWTManager(secret []byte) *JWTManager {
+	if len(secret) < 16 {
+		log.Println("SECURITY WARNING: JWT signing secret has fewer than 16 bytes. Provide a strong secret in production.")
+	}
 	return &JWTManager{secret: secret}
 }
 
