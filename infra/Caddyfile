@@ -1,9 +1,18 @@
 {$DOMAIN:chat.yourcompany.com} {
+    encode zstd gzip
+
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
     reverse_proxy /api/* server:8080
     reverse_proxy /ws server:8080
     reverse_proxy /* web:3000
 }
 
 {$MINIO_DOMAIN:minio.yourcompany.com} {
+    encode zstd gzip
     reverse_proxy minio:9000
 }

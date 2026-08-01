@@ -7,6 +7,7 @@ export class WSClient {
   private listeners: Map<string, Set<WSEventListener>> = new Map();
   private isConnected = false;
   private reconnectTimer: any = null;
+  private reconnectAttempts = 0;
 
   constructor(url: string) {
     this.url = url;
@@ -31,6 +32,7 @@ export class WSClient {
           const frame = JSON.parse(event.data);
           if (frame.type === 'auth.ok') {
             this.isConnected = true;
+            this.reconnectAttempts = 0;
             this.emit('connected', frame);
           }
           this.emit(frame.type, frame);
@@ -57,10 +59,16 @@ export class WSClient {
 
   private scheduleReconnect() {
     if (this.reconnectTimer) return;
+
+    this.reconnectAttempts++;
+    const baseDelay = Math.min(30000, 1000 * Math.pow(2, Math.min(this.reconnectAttempts, 5)));
+    const jitter = Math.floor(Math.random() * 1000);
+    const delay = baseDelay + jitter;
+
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
-    }, 3000);
+    }, delay);
   }
 
   send(data: any) {
@@ -110,6 +118,12 @@ export class WSClient {
   }
 
   disconnect() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectAttempts = 0;
+    this.isConnected = false;
     if (this.ws) {
       this.ws.close();
       this.ws = null;

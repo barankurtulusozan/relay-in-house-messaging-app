@@ -156,10 +156,13 @@ func (c *Client) WriteLoop(ctx context.Context) {
 				return
 			}
 		case <-ticker.C:
-			// Ping connection
+			// Ping connection and refresh Redis presence TTL
 			err := c.conn.Ping(ctx)
 			if err != nil {
 				return
+			}
+			if c.UserID != uuid.Nil {
+				_ = c.hub.presence.SetOnline(ctx, c.UserID)
 			}
 		case <-ctx.Done():
 			return
