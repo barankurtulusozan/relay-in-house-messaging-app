@@ -217,30 +217,33 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID uuid.UUID, msgID
 		return nil, err
 	}
 
-	// Fetch sender details
-	sender, _ := s.userRepo.GetUserByID(ctx, senderID)
-	savedMsg.Sender = sender
+	// 4. Publish domain event & send push notifications asynchronously
+	go func(msg *domain.Message) {
+		bgCtx := context.Background()
+		sender, _ := s.userRepo.GetUserByID(bgCtx, senderID)
+		msg.Sender = sender
 
-	// 4. Publish domain event to Redis for WS delivery
-	event := &domain.DomainEvent{
-		Type:           domain.EventMessageNew,
-		ConversationID: &conversationID,
-		UserID:         senderID,
-		Payload:        savedMsg,
-		Timestamp:      time.Now(),
-	}
+		event := &domain.DomainEvent{
+			Type:           domain.EventMessageNew,
+			ConversationID: &conversationID,
+			UserID:         senderID,
+			Payload:        msg,
+			Timestamp:      time.Now(),
+		}
 
-	// Get all members to notify
-	members, err := s.convRepo.GetMembers(ctx, conversationID)
-	if err == nil {
+		members, err := s.convRepo.GetMembers(bgCtx, conversationID)
+		if err != nil {
+			return
+		}
+
 		for _, member := range members {
-			_ = s.eventPub.PublishUserEvent(ctx, member.UserID, event)
+			_ = s.eventPub.PublishUserEvent(bgCtx, member.UserID, event)
 
 			// Push notification for offline recipients
 			if member.UserID != senderID {
-				status, _ := s.presence.GetStatus(ctx, member.UserID)
+				status, _ := s.presence.GetStatus(bgCtx, member.UserID)
 				if status == domain.StatusOffline {
-					devices, _ := s.deviceRepo.GetUserDevices(ctx, member.UserID)
+					devices, _ := s.deviceRepo.GetUserDevices(bgCtx, member.UserID)
 					for _, d := range devices {
 						title := "New Message"
 						if sender != nil {
@@ -250,19 +253,19 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID uuid.UUID, msgID
 						if body != nil {
 							bodyText = *body
 						}
-						_ = s.pushNotifier.SendPush(ctx, d, domain.PushNotification{
+						_ = s.pushNotifier.SendPush(bgCtx, d, domain.PushNotification{
 							Title: title,
 							Body:  bodyText,
 							Data: map[string]string{
 								"conversation_id": conversationID.String(),
-								"message_id":      savedMsg.ID.String(),
+								"message_id":      msg.ID.String(),
 							},
 						})
 					}
 				}
 			}
 		}
-	}
+	}(savedMsg)
 
 	return savedMsg, nil
 }

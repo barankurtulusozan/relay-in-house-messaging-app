@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"company-chat/server/internal/domain"
 
@@ -122,22 +123,26 @@ func (r *Repository) CreateConversation(ctx context.Context, conv *domain.Conver
 	}
 	c.Type = domain.ConversationType(typeStr)
 
-	memberQuery := `
-		INSERT INTO conversation_members (conversation_id, user_id, role)
-		VALUES ($1, $2, $3)
-	`
-	for _, memberID := range memberIDs {
-		role := string(domain.RoleMember)
-		if memberID == conv.CreatedBy {
-			role = string(domain.RoleOwner)
+	if len(memberIDs) > 0 {
+		memberQuery := `INSERT INTO conversation_members (conversation_id, user_id, role) VALUES `
+		vals := make([]interface{}, 0, len(memberIDs)*3)
+		for i, memberID := range memberIDs {
+			role := string(domain.RoleMember)
+			if memberID == conv.CreatedBy {
+				role = string(domain.RoleOwner)
+			}
+			if i > 0 {
+				memberQuery += ", "
+			}
+			p1 := i*3 + 1
+			p2 := i*3 + 2
+			p3 := i*3 + 3
+			memberQuery += fmt.Sprintf("($%d, $%d, $%d)", p1, p2, p3)
+			vals = append(vals, c.ID, memberID, role)
 		}
-		if _, err := tx.Exec(ctx, memberQuery, c.ID, memberID, role); err != nil {
+		if _, err := tx.Exec(ctx, memberQuery, vals...); err != nil {
 			return nil, err
 		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
 	}
 
 	return &c, nil

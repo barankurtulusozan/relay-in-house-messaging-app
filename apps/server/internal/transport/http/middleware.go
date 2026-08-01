@@ -43,10 +43,37 @@ type ipRateLimiter struct {
 	requests map[string][]time.Time
 }
 
+func (l *ipRateLimiter) startCleanup(window time.Duration) {
+	ticker := time.NewTicker(window * 2)
+	go func() {
+		for range ticker.C {
+			now := time.Now()
+			cutoff := now.Add(-window)
+
+			l.mu.Lock()
+			for ip, timestamps := range l.requests {
+				var valid []time.Time
+				for _, t := range timestamps {
+					if t.After(cutoff) {
+						valid = append(valid, t)
+					}
+				}
+				if len(valid) == 0 {
+					delete(l.requests, ip)
+				} else {
+					l.requests[ip] = valid
+				}
+			}
+			l.mu.Unlock()
+		}
+	}()
+}
+
 func RateLimitMiddleware(maxReqs int, window time.Duration) func(http.Handler) http.Handler {
 	limiter := &ipRateLimiter{
 		requests: make(map[string][]time.Time),
 	}
+	limiter.startCleanup(window)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -10,7 +10,7 @@ class ChatDatabase extends Dexie {
   constructor() {
     super('CompanyChatDB');
     this.version(1).stores({
-      messages: 'id, conversation_id, server_seq, created_at',
+      messages: 'id, conversation_id, server_seq, created_at, [conversation_id+server_seq]',
       outbox: 'id, conversation_id, created_at',
       sync_cursors: 'conversation_id',
     });
